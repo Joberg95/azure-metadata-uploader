@@ -1,0 +1,78 @@
+# Docker
+# Build and push an image to Azure Container Registry
+# https://docs.microsoft.com/azure/devops/pipelines/languages/docker
+
+trigger:
+  - master
+
+resources:
+  - repo: self
+
+variables:
+  # Container registry service connection established during pipeline creation
+  dockerRegistryServiceConnection: "e8352c0c-f6d5-449d-9080-9d82e63df360"
+  imageRepositoryProd: "azure-metadata-manager-prod"
+  imageRepositoryQa: "azure-metadata-manager-qa"
+  imageRepositoryDev: "azure-metadata-manager-dev"
+  containerAppName: "azure-metadata-manager-we"
+  containerAppServiceConnection: "0e379572-637f-4b00-b7a5-ac3286b4de22"
+  containerAppResourceGroup: "azure-web-we"
+  containerRegistry: "ldgsregistry.azurecr.io"
+  dockerfilePath: "**/Dockerfile"
+  tag: "$(Build.BuildId)"
+
+  # Agent VM image name
+  vmImageName: "ubuntu-latest"
+
+stages:
+  - stage: Build
+    displayName: Build and push stage
+    variables:
+      - group: azure-metadata-dev-variables
+    jobs:
+      - job: Build
+        displayName: Build
+        pool:
+          vmImage: $(vmImageName)
+        steps:
+          - task: Docker@2
+            displayName: Build development image
+            inputs:
+              command: build
+              containerRegistry: $(dockerRegistryServiceConnection)
+              repository: $(imageRepositoryDev)
+              dockerfile: $(dockerfilePath)
+              arguments: --build-arg BUILD_ENV=development
+          - task: Docker@2
+            displayName: Push development image
+            inputs:
+              command: push
+              containerRegistry: $(dockerRegistryServiceConnection)
+              repository: $(imageRepositoryDev)
+              tags: |
+                $(tag)
+
+          - task: AzureCLI@2
+            displayName: Deploy to Container Apps
+            inputs:
+              azureSubscription: $(containerAppServiceConnection)
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                az containerapp update \
+                  --name $(containerAppName) \
+                  --resource-group $(containerAppResourceGroup) \
+                  --image $(containerRegistry)/$(imageRepositoryDev):$(Build.BuildId) \
+                  --set-env-vars \
+                    "NEXT_PUBLIC_AZURE_TABLE_URL=$(NEXT_PUBLIC_AZURE_TABLE_URL)" \
+                    "NEXT_AZURE_SAS_TOKEN=$(NEXT_AZURE_SAS_TOKEN)" \
+                    "NEXT_PUBLIC_AZURE_BLOB_CONNECTION_URL=$(NEXT_PUBLIC_AZURE_BLOB_CONNECTION_URL)" \
+                    "NEXT_AZURE_BLOB_SAS_TOKEN=$(NEXT_AZURE_BLOB_SAS_TOKEN)" \
+                    "AZURE_AD_CLIENT_ID=$(AZURE_AD_CLIENT_ID)" \
+                    "AZURE_AD_CLIENT_SECRET=$(AZURE_AD_CLIENT_SECRET)" \
+                    "AZURE_AD_TENANT_ID=$(AZURE_AD_TENANT_ID)" \
+                    "NEXTAUTH_SECRET=$(NEXTAUTH_SECRET)" \
+                    "NEXTAUTH_URL=$(NEXTAUTH_URL_DEV)" \
+                    "NEXT_PUBLIC_AZURE_BLOB_SERVICE_CONNECTION_URL=$(NEXT_PUBLIC_AZURE_BLOB_SERVICE_CONNECTION_URL)" \
+                    "NEXT_AZURE_BLOB_SERVICE_SAS_TOKEN=$(NEXT_AZURE_BLOB_SERVICE_SAS_TOKEN)"
+                    
