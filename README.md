@@ -1,5 +1,7 @@
 # Azure Metadata Manager
 
+## Wip - Adding more error handling and fallback modals for cancellation actions
+
 A web application for managing metadata for Azure Blob Storage documents. This application allows users to add, edit, copy, or delete documents with file specific meta data.
 
 ## Features
